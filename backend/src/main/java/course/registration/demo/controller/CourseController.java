@@ -1,43 +1,98 @@
 package course.registration.demo.controller;
 
-import course.registration.demo.dto.ApiResponse;
-import course.registration.demo.dto.CourseDTO;
-import course.registration.demo.service.CourseService;
-import lombok.RequiredArgsConstructor;
+import course.registration.demo.entity.Course;
+import course.registration.demo.repository.CourseRepository;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Locale;
 
 @RestController
 @RequestMapping("/api/courses")
-@RequiredArgsConstructor
 @CrossOrigin(origins = "*")
 public class CourseController {
 
-    private final CourseService courseService;
+    private final CourseRepository courseRepository;
 
+    public CourseController(CourseRepository courseRepository) {
+        this.courseRepository = courseRepository;
+    }
+
+    /**
+     * GET /api/courses
+     *
+     * Returns all active courses.
+     */
     @GetMapping
-    public ResponseEntity<ApiResponse<List<CourseDTO>>> getAllCourses(
-            @RequestParam(required = false) String basket,
-            @RequestParam(required = false) String username) {
+    public ResponseEntity<List<Course>> getAllActiveCourses() {
+
+        List<Course> courses =
+                courseRepository.findByActiveTrueOrderByCourseCodeAsc();
+
+        return ResponseEntity.ok(courses);
+    }
+
+    /**
+     * GET /api/courses/basket/{category}
+     *
+     * Supported categories:
+     * UC
+     * UE
+     * PC
+     * PE
+     */
+    @GetMapping("/basket/{category}")
+    public ResponseEntity<?> getCoursesByBasket(
+            @PathVariable String category
+    ) {
+
         try {
-            List<CourseDTO> list = courseService.getAllCourses(basket, username);
-            return ResponseEntity.ok(ApiResponse.ok(list));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+
+            Course.BasketCategory basketCategory =
+                    Course.BasketCategory.valueOf(
+                            category.toUpperCase(Locale.ROOT)
+                    );
+
+            List<Course> courses =
+                    courseRepository
+                            .findByBasketCategoryAndActiveTrueOrderByCourseCodeAsc(
+                                    basketCategory
+                            );
+
+            return ResponseEntity.ok(courses);
+
+        } catch (IllegalArgumentException e) {
+
+            return ResponseEntity
+                    .badRequest()
+                    .body("Invalid basket category. Use UC, UE, PC or PE.");
         }
     }
 
-    @GetMapping("/{code}")
-    public ResponseEntity<ApiResponse<CourseDTO>> getCourseByCode(
-            @PathVariable String code,
-            @RequestParam(required = false) String username) {
-        try {
-            CourseDTO course = courseService.getCourseByCode(code, username);
-            return ResponseEntity.ok(ApiResponse.ok(course));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage()));
+    /**
+     * GET /api/courses/search?q=...
+     *
+     * Live search by:
+     * - course code
+     * - title
+     * - course type
+     */
+    @GetMapping("/search")
+    public ResponseEntity<List<Course>> searchCourses(
+            @RequestParam(defaultValue = "") String q
+    ) {
+
+        if (q == null || q.trim().isEmpty()) {
+
+            return ResponseEntity.ok(
+                    courseRepository.findByActiveTrueOrderByCourseCodeAsc()
+            );
         }
+
+        List<Course> courses =
+                courseRepository.searchActiveCourses(q.trim());
+
+        return ResponseEntity.ok(courses);
     }
 }
